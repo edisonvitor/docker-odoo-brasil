@@ -55,18 +55,24 @@ check_config "db_port" "$PORT"
 check_config "db_user" "$USER"
 check_config "db_password" "$PASSWORD"
 
+# Testa a conexão no banco configurado (o primeiro de DATABASE), não no "postgres"
+WAIT_ARGS=("${DB_ARGS[@]}" --timeout=30)
+if [[ -n "$DATABASE" && "$DATABASE" != "False" ]]; then
+    WAIT_ARGS+=(--db_name "${DATABASE%%,*}")
+fi
+
 case "$1" in
     -- | odoo)
         shift
         if [[ "$1" == "scaffold" ]] ; then
             exec odoo "$@"
         else
-            wait-for-psql.py ${DB_ARGS[@]} --timeout=30
+            wait-for-psql.py "${WAIT_ARGS[@]}"
             exec odoo "$@" "${DB_ARGS[@]}"
         fi
         ;;
     -*)
-        wait-for-psql.py ${DB_ARGS[@]} --timeout=30
+        wait-for-psql.py "${WAIT_ARGS[@]}"
         exec odoo "$@" "${DB_ARGS[@]}"
         ;;
     *)

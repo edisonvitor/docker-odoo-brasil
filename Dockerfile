@@ -76,6 +76,7 @@ ENV ODOO_PASSWORD=admin \
     LIMIT_MEMORY_SOFT=2147483648 \
     LIMIT_MEMORY_HARD=2684354560 \
     DB_FILTER=False \
+    DB_MAXCONN=64 \
     QUEUE_JOB_CHANNELS=root:2
 
 COPY --chown=odoo odoo.conf.tpl /etc/odoo/odoo.conf.tpl

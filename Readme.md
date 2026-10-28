@@ -63,6 +63,36 @@ O valor de `-d` precisa ser igual ao `DATABASE` do `.env`. O primeiro acesso é 
 
 O `.env.example` já vem com `LIST_DB=False`, o que desliga o gerenciador de bancos (`/web/database/manager`). Na internet, deixe assim. Com ele ligado, qualquer pessoa que descubra a senha master consegue baixar ou apagar os bancos.
 
+### Com um Postgres que já existe
+
+O [docker-compose.external-db.yml](docker-compose.external-db.yml) sobe só o Caddy e o Odoo. A conexão vem de `HOST`, `PORT`, `USER` e `PASSWORD` no `.env` (seção "Postgres externo" do `.env.example`). Se o Postgres roda na mesma máquina, fora do Docker, use `HOST=host.docker.internal`.
+
+No Postgres, como superusuário:
+
+```sql
+CREATE ROLE odoo LOGIN PASSWORD 'senha-forte';
+CREATE DATABASE producao OWNER odoo ENCODING 'UTF8'
+    LC_COLLATE 'C' LC_CTYPE 'C.UTF-8' TEMPLATE template0;
+-- conectado no banco producao:
+CREATE EXTENSION IF NOT EXISTS unaccent;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+```
+
+No `pg_hba.conf`, libere o usuário no banco do Odoo **e no banco `postgres`**. Ao iniciar, o Odoo conecta no `postgres` para checar se o banco existe, e cai se a conexão for recusada. O usuário continua sem permissão para criar bancos.
+
+```
+host    producao    odoo    IP_DO_ODOO/32    scram-sha-256
+host    postgres    odoo    IP_DO_ODOO/32    scram-sha-256
+```
+
+Com o Postgres compartilhado, ajuste o `DB_MAXCONN` para que `(WORKERS + 2) × DB_MAXCONN` caiba no `max_connections` disponível.
+
+```bash
+docker compose -f docker-compose.external-db.yml run --rm -e WORKERS=0 odoo odoo -d producao \
+    -i l10n_br_base,l10n_br_account,l10n_br_coa_generic --stop-after-init --without-demo=all
+docker compose -f docker-compose.external-db.yml up -d
+```
+
 ### Por que `env_file` e não `${VAR}`
 
 A imagem usa variáveis com nomes genéricos (`USER`, `HOST`, `PORT`, `PASSWORD`). Na interpolação `${VAR}` do compose, as variáveis do shell têm prioridade sobre o `.env`, e aí `${USER}` viraria o seu usuário do Linux. Com `env_file: .env`, os valores vão direto para o container.
@@ -122,6 +152,7 @@ O `entrypoint.sh` gera o `/etc/odoo/odoo.conf` a partir do [odoo.conf.tpl](odoo.
 | `DATABASE` | `False` | Banco padrão (`db_name`) |
 | `DB_FILTER` | `False` | Regex de bancos visíveis (`dbfilter`) |
 | `LIST_DB` | `True` | Gerenciador de bancos. Use `False` em produção. |
+| `DB_MAXCONN` | `64` | Conexões ao Postgres por processo do Odoo (`db_maxconn`) |
 | `WORKERS` | `5` | Processos HTTP. Precisa ser maior que 0 por causa do `queue_job`. |
 | `QUEUE_JOB_CHANNELS` | `root:2` | Canais do `queue_job` |
 | `LIMIT_MEMORY_SOFT` | `2147483648` | Memória por worker antes de reciclar (bytes) |

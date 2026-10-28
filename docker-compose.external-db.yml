@@ -1,0 +1,48 @@
+# Produção com Postgres externo (já existente): Caddy (HTTPS automático) -> Odoo.
+# Só o Caddy expõe portas. Configuração no .env (veja .env.example, seção
+# "Postgres externo").
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "50m"
+    max-file: "5"
+
+services:
+  odoo:
+    image: ${ODOO_IMAGE:-ghcr.io/edisonvitor/odoo-brasil:18.0}
+    restart: unless-stopped
+    # env_file e não ${VAR}: USER/HOST/PASSWORD do shell teriam prioridade
+    # sobre o .env na interpolação do compose
+    env_file: .env
+    environment:
+      ODOO_PORT: 8069
+      LONGPOLLING_PORT: 8072
+      LOG_FILE: 'False'
+    # permite HOST=host.docker.internal quando o Postgres roda na mesma máquina
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - odoo-data:/var/lib/odoo
+    logging: *logging
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - odoo
+    environment:
+      DOMAIN: ${DOMAIN:?defina DOMAIN no .env}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    logging: *logging
+
+volumes:
+  odoo-data:
+  caddy-data:
+  caddy-config:

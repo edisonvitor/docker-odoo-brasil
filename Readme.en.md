@@ -63,6 +63,36 @@ The value of `-d` must match `DATABASE` in `.env`. The first login uses user `ad
 
 `.env.example` ships with `LIST_DB=False`, which turns off the database manager (`/web/database/manager`). Keep it that way on the internet. With it on, anyone who learns the master password can download or delete the databases.
 
+### With an existing Postgres
+
+[docker-compose.external-db.yml](docker-compose.external-db.yml) runs only Caddy and Odoo. The connection comes from `HOST`, `PORT`, `USER` and `PASSWORD` in `.env` (the "Postgres externo" section of `.env.example`). If Postgres runs on the same machine, outside Docker, use `HOST=host.docker.internal`.
+
+On Postgres, as a superuser:
+
+```sql
+CREATE ROLE odoo LOGIN PASSWORD 'strong-password';
+CREATE DATABASE producao OWNER odoo ENCODING 'UTF8'
+    LC_COLLATE 'C' LC_CTYPE 'C.UTF-8' TEMPLATE template0;
+-- connected to the producao database:
+CREATE EXTENSION IF NOT EXISTS unaccent;
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+```
+
+In `pg_hba.conf`, allow the user on the Odoo database **and on the `postgres` database**. On startup, Odoo connects to `postgres` to check whether its database exists, and it crashes if the connection is refused. The user still can't create databases.
+
+```
+host    producao    odoo    ODOO_IP/32    scram-sha-256
+host    postgres    odoo    ODOO_IP/32    scram-sha-256
+```
+
+With a shared Postgres, tune `DB_MAXCONN` so that `(WORKERS + 2) × DB_MAXCONN` fits in the available `max_connections`.
+
+```bash
+docker compose -f docker-compose.external-db.yml run --rm -e WORKERS=0 odoo odoo -d producao \
+    -i l10n_br_base,l10n_br_account,l10n_br_coa_generic --stop-after-init --without-demo=all
+docker compose -f docker-compose.external-db.yml up -d
+```
+
 ### Why `env_file` and not `${VAR}`
 
 The image uses generic variable names (`USER`, `HOST`, `PORT`, `PASSWORD`). In compose `${VAR}` interpolation, shell variables take precedence over `.env`, so `${USER}` would become your Linux username. With `env_file: .env`, the values go straight into the container.
@@ -122,6 +152,7 @@ Schedule these commands (cron) and keep the copies **off the server**.
 | `DATABASE` | `False` | Default database (`db_name`) |
 | `DB_FILTER` | `False` | Regex of visible databases (`dbfilter`) |
 | `LIST_DB` | `True` | Database manager. Use `False` in production. |
+| `DB_MAXCONN` | `64` | Postgres connections per Odoo process (`db_maxconn`) |
 | `WORKERS` | `5` | HTTP processes. Must be greater than 0 because of `queue_job`. |
 | `QUEUE_JOB_CHANNELS` | `root:2` | `queue_job` channels |
 | `LIMIT_MEMORY_SOFT` | `2147483648` | Memory per worker before it is recycled (bytes) |
