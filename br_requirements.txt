@@ -1,25 +1,12 @@
-# odoo-brasil
-suds-jurko-requests
-xmlsec
-
-# trustcode-addons
-urllib3==1.22
-pyopenssl==20.0.1
-iugu-trustcode
+# Dependências extras. As dos addons OCA (l10n-brazil incluso) vêm dos
+# requirements.txt de cada repositório, concatenados no build.
 
 # Atualizacao
 click-odoo-contrib
 
 # Sentry
 sentry-sdk
-raven
 
-# outras
-setuptools 
-pytrustnfe3
-python3-cnab
-python3-boleto
-pycnab240
-python-sped
-signxml==2.9.0
-formio-data==0.4.5
+# Pins usados pelo OCA l10n-brazil 18.0
+signxml==3.2.2
+requests_pkcs12<1.23

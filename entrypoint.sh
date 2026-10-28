@@ -17,8 +17,12 @@ done
 export ADDONS_PATH="$path"
 
 
-conf=$(cat /etc/odoo/odoo.conf | envsubst)
-echo "$conf" > /etc/odoo/odoo.conf
+# Gera o odoo.conf a partir do template a cada start
+envsubst < /etc/odoo/odoo.conf.tpl > "$ODOO_RC"
+
+# Canais do queue_job via env: uma seção [queue_job] no odoo.conf quebra o
+# config.save() do Odoo (DuplicateSectionError ao criar banco pela tela)
+export ODOO_QUEUE_JOB_CHANNELS="$QUEUE_JOB_CHANNELS"
 
 
 if [ -v PASSWORD_FILE ]; then
@@ -32,6 +36,9 @@ fi
 : ${USER:=${DB_ENV_POSTGRES_USER:=${POSTGRES_USER:='odoo'}}}
 : ${PASSWORD:=${DB_ENV_POSTGRES_PASSWORD:=${POSTGRES_PASSWORD:='odoo'}}}
 
+# Para comandos que não recebem os --db_* (click-odoo-*, psql)
+export PGHOST="$HOST" PGPORT="$PORT" PGUSER="$USER" PGPASSWORD="$PASSWORD"
+
 DB_ARGS=()
 function check_config() {
     param="$1"
@@ -42,11 +49,6 @@ function check_config() {
     DB_ARGS+=("--${param}")
     DB_ARGS+=("${value}")
 }
-
-echo "DB_PORT: $PORT
-DB_HOST: $HOST
-DB_USER: $USER
-DB_PASSWORD: $PASSWORD"
 
 check_config "db_host" "$HOST"
 check_config "db_port" "$PORT"
