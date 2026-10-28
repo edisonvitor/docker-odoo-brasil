@@ -1,23 +1,37 @@
-version: '3'
+# Ambiente de desenvolvimento. Para produção use docker-compose.prod.yml.
 services:
   db:
-    image: postgres:14
-    restart: always
+    image: postgres:16
+    restart: unless-stopped
     environment:
       POSTGRES_DB: 'postgres'
-      POSTGRES_USER: 'dbuser'
-      POSTGRES_PASSWORD: 'as6d54sda'
+      POSTGRES_USER: 'odoo'
+      POSTGRES_PASSWORD: 'odoo'
     ports:
-      - "5432:5432"
+      # só acessível da própria máquina
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
   odoo:
-    image: craines/odoo-brasil:15.0
+    build: .
+    image: craines/odoo-brasil:18.0
+    restart: unless-stopped
     ports:
       - "8069:8069"
+      - "8072:8072"
     depends_on:
       - db
     environment:
       HOST: db
       PORT: 5432
-      USER: dbuser
-      PASSWORD: as6d54sda
+      USER: odoo
+      PASSWORD: odoo
       ODOO_PORT: 8069
+    volumes:
+      - odoo-data:/var/lib/odoo
+      # addons próprios (desenvolvimento)
+      - ./addons:/mnt/addons/extra-addons
+
+volumes:
+  db-data:
+  odoo-data:

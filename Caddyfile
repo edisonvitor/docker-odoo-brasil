@@ -1,0 +1,8 @@
+{$DOMAIN} {
+	encode gzip
+
+	# websocket (bus/notificações) vai para o gevent_port
+	reverse_proxy /websocket* odoo:8072
+
+	reverse_proxy odoo:8069
+}
