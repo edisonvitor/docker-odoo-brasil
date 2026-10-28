@@ -24,8 +24,7 @@ services:
     logging: *logging
 
   odoo:
-    image: ${ODOO_IMAGE:-craines/odoo-brasil:18.0}
-    build: .
+    image: ${ODOO_IMAGE:-ghcr.io/edisonvitor/odoo-brasil:18.0}
     restart: unless-stopped
     depends_on:
       db:

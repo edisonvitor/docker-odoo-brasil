@@ -1,0 +1,106 @@
+# Build, smoke test e publicação da imagem no GHCR.
+# Tags: 18.0 (mais recente), 18.0-AAAAMMDD (fixa, para produção) e sha-<commit>.
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # semanal, para pegar as correções dos repositórios OCA
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/odoo-brasil
+  # módulos instalados no smoke test; falha se faltar dependência
+  TEST_MODULES: l10n_br_coa_generic,l10n_br_nfe,l10n_br_account_payment_order,l10n_br_mis_report,account_reconcile_oca,mis_builder_cash_flow,web_dark_mode
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: odoo
+          POSTGRES_PASSWORD: odoo
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: odoo-brasil:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test (instala os módulos)
+        run: |
+          docker run --rm --network host \
+            -e HOST=127.0.0.1 -e USER=odoo -e PASSWORD=odoo -e WORKERS=0 \
+            odoo-brasil:test odoo -d teste -i "$TEST_MODULES" \
+            --stop-after-init --without-demo=all 2>&1 | tee odoo.log
+          if grep -E " (ERROR|CRITICAL) " odoo.log; then
+            echo "::error::erros no log da instalação"
+            exit 1
+          fi
+          # o Odoo pode terminar com código 0 mesmo sem instalar um módulo
+          missing=$(docker run --rm --network host -e PGPASSWORD=odoo \
+            --entrypoint psql odoo-brasil:test -h 127.0.0.1 -U odoo -d teste -Atc \
+            "select m from unnest(string_to_array('$TEST_MODULES', ',')) m
+              where not exists (select 1 from ir_module_module
+                                 where name = m and state = 'installed')")
+          if [ -n "$missing" ]; then
+            echo "::error::módulos não instalados: $missing"
+            exit 1
+          fi
+
+      - name: Metadados
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=18.0
+            type=raw,value=18.0-{{date 'YYYYMMDD'}}
+            type=sha
+          labels: |
+            org.opencontainers.image.title=odoo-brasil
+            org.opencontainers.image.description=Odoo 18 com a localização brasileira da OCA (l10n-brazil)
+            org.opencontainers.image.licenses=AGPL-3.0
+
+      - name: Login no GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # reaproveita o cache do build testado acima
+      - name: Publica
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha

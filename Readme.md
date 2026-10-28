@@ -69,19 +69,24 @@ A imagem usa variáveis com nomes genéricos (`USER`, `HOST`, `PORT`, `PASSWORD`
 
 Se preferir não guardar a senha do banco em variável, use `PASSWORD_FILE` apontando para um arquivo, por exemplo um Docker secret.
 
-### Versões fixas
+### Imagem publicada e versões fixas
 
-O build clona o topo da branch `18.0` de cada repositório OCA, então dois builds em dias diferentes podem gerar imagens diferentes. Para produção, gere uma tag com data, teste e só depois aponte o `ODOO_IMAGE` para ela:
+O [GitHub Actions](.github/workflows/build.yml) faz o build e publica a imagem em [`ghcr.io/edisonvitor/odoo-brasil`](https://github.com/edisonvitor/docker-odoo-brasil/pkgs/container/odoo-brasil). Isso acontece a cada push no `main`, toda segunda-feira (para pegar as correções da OCA) e quando o workflow é disparado à mão. Antes de publicar, o workflow instala os principais módulos num Postgres temporário. Se alguma dependência faltar, a imagem não é publicada.
 
-```bash
-docker build --build-arg ODOO_TAG=18.0-20261015 -t craines/odoo-brasil:18.0-$(date +%Y%m%d) .
-```
+| Tag | Uso |
+|---|---|
+| `18.0` | Build mais recente |
+| `18.0-AAAAMMDD` | Fixa, para produção |
+| `sha-<commit>` | Rastreia de qual commit a imagem saiu |
+
+O build clona o topo da branch `18.0` de cada repositório OCA, então builds de dias diferentes geram imagens diferentes. Em produção, use uma tag com data no `ODOO_IMAGE` e teste em homologação antes de trocar. Para voltar atrás, basta apontar de novo para a tag anterior.
 
 ### Atualizando módulos
 
-Depois de trocar a imagem por uma versão nova, atualize os módulos que mudaram:
+Depois de trocar o `ODOO_IMAGE` por uma versão nova, baixe a imagem e atualize os módulos que mudaram:
 
 ```bash
+docker compose -f docker-compose.prod.yml pull odoo
 docker compose -f docker-compose.prod.yml run --rm -e WORKERS=0 odoo \
     click-odoo-update -c /etc/odoo/odoo.conf -d producao
 ```
